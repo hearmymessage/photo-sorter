@@ -23,6 +23,8 @@ def get_jpg_time(jpg_file):
             exif_dict = img.read_exif()
     except RuntimeError as e:
         logging.warn(e)
+    except UnicodeDecodeError as e:
+        logging.warn(e)
 
     try:
         with pyexiv2.Image(jpg_file) as img:
@@ -43,7 +45,14 @@ def get_jpg_time(jpg_file):
             new_date_time = exif_dict['Exif.Photo.DateTimeOriginal']
             logging.debug(
                 'DateTimeOriginal tag found: {}'.format(new_date_time))
+        elif 'Exif.Image.DateTimeOriginal' in exif_dict.keys():
+            new_date_time = exif_dict['Exif.Image.DateTimeOriginal']
+            logging.debug(
+                'DateTimeOriginal tag found: {}'.format(new_date_time))
         elif 'Exif.Image.DateTime' in exif_dict.keys():
+            new_date_time = exif_dict['Exif.Image.DateTime']
+            logging.debug('DateTime tag found: {}'.format(new_date_time))
+        elif 'Exif.Photo.DateTime' in exif_dict.keys():
             new_date_time = exif_dict['Exif.Photo.DateTime']
             logging.debug('DateTime tag found: {}'.format(new_date_time))
         else:
@@ -59,14 +68,29 @@ def get_jpg_time(jpg_file):
         logging.debug("IPTC read: {}".format(iptc_dict))
 
     if new_date_time != '':
-        date_time = datetime.datetime.strptime(new_date_time,
-                                               '%Y:%m:%d %H:%M:%S')
-        logging.info('Timestamp from metadata: {} ({})'.format(
-            date_time, new_date_time))
-    else:
-        '''Get time from file ctime'''
-        date_time = datetime.datetime.fromtimestamp(os.path.getctime(jpg_file))
-        logging.info('Timestamp from file (created): {}'.format(date_time))
+        try:
+            date_time = datetime.datetime.strptime(new_date_time,
+                                                   '%Y:%m:%d %H:%M:%S')
+        except ValueError:
+            pass
+        else:
+            logging.info('Timestamp from metadata: {} ({})'.format(
+                date_time, new_date_time))
+            return date_time
+
+        try:
+            date_time = datetime.datetime.strptime(new_date_time,
+                                                   '%Y/%m/%d %H:%M:%S')
+        except ValueError:
+            pass
+        else:
+            logging.info('Timestamp from metadata: {} ({})'.format(
+                date_time, new_date_time))
+            return date_time
+
+    # If those haven't worked, get time from file ctime
+    date_time = datetime.datetime.fromtimestamp(os.path.getctime(jpg_file))
+    logging.info('Timestamp from file (created): {}'.format(date_time))
 
     return date_time
 
@@ -75,15 +99,31 @@ def generate_path(lib_dir, item_path, out_dir, date_time):
     logging.debug("File: {}".format(item_path))
     root, file_ext = os.path.splitext(item_path)
     date_time_str = datetime.datetime.strftime(date_time, '%Y_%m_%d %H_%M_%S')
+    year_str = datetime.datetime.strftime(date_time, '%Y')
+    month_str = datetime.datetime.strftime(date_time, '%m')
     item_bits = item_path.replace(lib_dir + '\\', '').split('\\')
     logging.debug('Item bits: {}'.format(item_bits))
     if len(item_bits[1:-1]) != 0:
-        newitem_bits = [
-            item_bits[0], '/', date_time_str, ' ', '-'.join(item_bits[1:-1]),
-            file_ext
-        ]
+        if item_bits[0] == year_str:
+            newitem_bits = [
+                year_str, '/', month_str, '/', date_time_str, ' ',
+                '-'.join(item_bits[1:-1]), file_ext
+            ]
+        else:
+            newitem_bits = [
+                year_str, '/', month_str, '/', date_time_str, ' ',
+                '-'.join(item_bits[0:-1]), file_ext
+            ]
     else:
-        newitem_bits = [item_bits[0], '/', date_time_str, file_ext]
+        if item_bits[0].startswith(year_str):
+            newitem_bits = [
+                year_str, '/', month_str, '/', date_time_str, file_ext
+            ]
+        else:
+            newitem_bits = [
+                year_str, '/', month_str, '/', date_time_str, ' ',
+                item_bits[0], file_ext
+            ]
     logging.debug('New item bits: {}'.format(newitem_bits))
     newitem = ''.join(newitem_bits)
     newitem = out_dir + '/' + newitem
