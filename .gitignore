@@ -7,8 +7,9 @@ __pycache__/
 *.so
 
 # Photos etc
-.jpg
-.xmp
+*.jpg
+*.xmp
+*.json
 
 # Distribution / packaging
 .Python

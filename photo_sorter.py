@@ -1,97 +1,182 @@
 #!/usr/bin/python
 # Sort photo folder out
 
-import os
-import time
-import string
-import shutil
-import pyexiv2
+import argparse
 import datetime
+import logging
+import os
+import pyexiv2
+import shutil
+import time
 
-base_path = '/mnt/Files/Google Drive/Photos/test'
+VALID_YEARS = range(2003, int(time.strftime('%Y')) + 1)
+VALID_MONTHS = range(1, 12 + 1)
 
 
-def find_photos(dir):
-    result = []
-    #print "Files in ", os.path.abspath(dir), ": "
-    for item in os.listdir(dir):
-        if os.path.isfile(os.path.join(dir, item)):
-            result.append(os.path.join(dir, item))
+def get_jpg_time(jpg_file):
+    exif_dict = {}
+    xmp_dict = {}
+    iptc_dict = {}
+    new_date_time = ''
+    try:
+        with pyexiv2.Image(jpg_file) as img:
+            exif_dict = img.read_exif()
+    except RuntimeError as e:
+        logging.warn(e)
+
+    try:
+        with pyexiv2.Image(jpg_file) as img:
+            xmp_dict = img.read_xmp()
+    except RuntimeError as e:
+        logging.warn(e)
+
+    try:
+        with pyexiv2.Image(jpg_file) as img:
+            iptc_dict = img.read_iptc()
+    except RuntimeError as e:
+        logging.warn(e)
+    except UnboundLocalError as e:
+        logging.warn(e)
+
+    if len(exif_dict) != 0:
+        if 'Exif.Photo.DateTimeOriginal' in exif_dict.keys():
+            new_date_time = exif_dict['Exif.Photo.DateTimeOriginal']
+            logging.debug(
+                'DateTimeOriginal tag found: {}'.format(new_date_time))
+        elif 'Exif.Image.DateTime' in exif_dict.keys():
+            new_date_time = exif_dict['Exif.Photo.DateTime']
+            logging.debug('DateTime tag found: {}'.format(new_date_time))
         else:
-            result.extend(find_photos(os.path.join(dir, item)))
-    return result
+            logging.debug(
+                'Exif present but DateTime tag not found -------------------------------------------------'
+            )
+            logging.debug(exif_dict)
 
+    elif len(xmp_dict) != 0:
+        logging.debug("XMP read: {}".format(xmp_dict))
 
-def kill_dead_folders(dir):
-    if not os.listdir(dir):
-        os.rmdir(dir)
-        print 'Deleted %s' % dir
+    elif len(iptc_dict) != 0:
+        logging.debug("IPTC read: {}".format(iptc_dict))
+
+    if new_date_time != '':
+        date_time = datetime.datetime.strptime(new_date_time,
+                                               '%Y:%m:%d %H:%M:%S')
+        logging.info('Timestamp from metadata: {} ({})'.format(
+            date_time, new_date_time))
     else:
-        for item in os.listdir(dir):
-            if os.path.isdir(os.path.join(dir, item)):
-                kill_dead_folders(os.path.join(dir, item))
+        '''Get time from file ctime'''
+        date_time = datetime.datetime.fromtimestamp(os.path.getctime(jpg_file))
+        logging.info('Timestamp from file (created): {}'.format(date_time))
+
+    return date_time
+
+
+def generate_path(lib_dir, item_path, out_dir, date_time):
+    logging.debug("File: {}".format(item_path))
+    root, file_ext = os.path.splitext(item_path)
+    date_time_str = datetime.datetime.strftime(date_time, '%Y_%m_%d %H_%M_%S')
+    item_bits = item_path.replace(lib_dir + '\\', '').split('\\')
+    logging.debug('Item bits: {}'.format(item_bits))
+    if len(item_bits[1:-1]) != 0:
+        newitem_bits = [
+            item_bits[0], '/', date_time_str, ' ', '-'.join(item_bits[1:-1]),
+            file_ext
+        ]
+    else:
+        newitem_bits = [item_bits[0], '/', date_time_str, file_ext]
+    logging.debug('New item bits: {}'.format(newitem_bits))
+    newitem = ''.join(newitem_bits)
+    newitem = out_dir + '/' + newitem
+    logging.debug("new item {}".format(newitem))
+    return newitem
+
+
+def rename_item(item, newitem, move, cut):
+    suffix_num = 0
+    root, file_ext = os.path.splitext(newitem)
+    file_ext = file_ext.lower()
+    newitem_test = root + file_ext
+    while os.path.exists(newitem_test):
+        suffix_num += 1
+        newitem_test = root + '_' + str(suffix_num) + file_ext
+
+    newitem = newitem_test
+
+    logging.info('Item to rename/move:\n\t{}\nto\t{}'.format(item, newitem))
+
+    if move:
+        dir_path = os.path.dirname(newitem)
+        if not os.path.exists(dir_path):
+            os.makedirs(dir_path)
+
+    if move and cut:
+        os.rename(item, newitem)
+    elif move and not cut:
+        shutil.copy2(item, newitem)
+
+
+def find_photos(lib_dir, curr_dir, out_dir, move, cut):
+    '''
+    lib_dir     base library directory
+    curr_dir    current directory (used when recursing)
+    out_dir     output directory (used for relocation items)
+    '''
+    logging.info("Files in {}:".format(os.path.abspath(curr_dir)))
+    for item in os.listdir(curr_dir):
+        item_path = os.path.join(curr_dir, item)
+        if os.path.isfile(item_path):
+            root, file_ext = os.path.splitext(item)
+            if file_ext.lower() == '.jpg':
+                date_time = get_jpg_time(item_path)
+                new_path = generate_path(lib_dir, item_path, out_dir,
+                                         date_time)
+                rename_item(item_path, new_path, move, cut)
+        else:
+            find_photos(lib_dir, os.path.join(curr_dir, item), out_dir, move,
+                        cut)
 
 
 def main():
-    photos = find_photos(base_path)
-    for item in photos:
-        root, file_ext = os.path.splitext(item)
-        if file_ext in ('.ini', '.py', '.db'):
-            continue
-        #print item
-        if 'Misc' in item:
-            item_bits = item.replace(base_path, '').split('/')
-            newitem_bits = item_bits[0], '/', '-'.join(item_bits[1:])
-        else:
-            item_bits = item.replace(base_path, '').split('/')
-            newitem_bits = item_bits[0], '/', item_bits[1], '/', '-'.join(item_bits[2:])
-        newitem = ''.join(newitem_bits)
-        newitem = base_path + newitem
+    parser = argparse.ArgumentParser(description='Photo Sorter')
+    parser.add_argument('--library',
+                        '-l',
+                        dest='library',
+                        default='C:/Users/willj/OneDrive/Documents/code/'
+                        'photo-sorter/test_library',
+                        help='Path to the library to sort')
+    parser.add_argument('--output',
+                        '-o',
+                        dest='output',
+                        default='C:/Users/willj/OneDrive/Documents/code/'
+                        'photo-sorter/output',
+                        help='Path to the output directory')
+    parser.add_argument('--move',
+                        '-m',
+                        dest='move',
+                        action='store_true',
+                        default=False,
+                        help='Move the files')
+    parser.add_argument('--cut',
+                        '-x',
+                        dest='cut',
+                        action='store_true',
+                        default=False,
+                        help='Remove the files from the source directory')
+    parser.add_argument('--verbose',
+                        '-v',
+                        dest='verbose',
+                        action='store_true',
+                        default=False,
+                        help='Verbose messages')
 
-        found_time = False
-        if file_ext is '.jpg':
-            img = pyexiv2.Image(item)
-            img.readMetadata()
-            #print img.exifKeys()
-            if 'Exif.Photo.DateTimeOriginal' in img.exifKeys():
-                #print img['Exif.Photo.DateTimeOriginal']
-                new_date_time = img['Exif.Photo.DateTimeOriginal']
-                found_time = True
-            elif 'Exif.Image.DateTime' in img.exifKeys():
-                #print img['Exif.Image.DateTime']
-                new_date_time = img['Exif.Photo.DateTime']
-                found_time = True
-            else:
-                print 'DateTime tag not found ------------------------------------------------------------'
-                new_date_time = ''
-            if new_date_time != '':
-                date_time_name = string.replace(str(new_date_time), ':', '-')
-                date_time_name = date_time_name.replace(' ', '-')
-                newitem = base_path + '/' + date_time_name
-        if not found_time:
-            '''Get time from file ctime'''
-            date_time = datetime.datetime.fromtimestamp(os.path.getctime(item))
-            date_time = str(date_time).split('.', 1)[0]
-            date_time = string.replace(str(date_time), ':', '-')
-            date_time = string.replace(str(date_time), ' ', '-')
-            newitem = base_path + '/' + date_time
+    args = parser.parse_args()
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
+    logging.warn(args)
 
-        suffix_num = 1
-        while os.path.exists(newitem + file_ext):
-            suffix_num += 1
-            newitem = base_path + '/' + date_time + '_' + str(suffix_num)
-
-        print item, '->', newitem
-        if 'Thumbs.db' in item:
-            os.remove(item)
-        else:
-            if os.path.exists(newitem + file_ext):
-                print 'err'
-            else:
-                # shutil.copy2(item, newitem + file_ext)
-                os.rename(item, newitem + file_ext)
-
-    kill_dead_folders(base_path)
+    find_photos(args.library, args.library, args.output, args.move, args.cut)
 
 
 if __name__ == "__main__":
