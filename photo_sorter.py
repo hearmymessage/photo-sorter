@@ -22,23 +22,23 @@ def get_jpg_time(jpg_file):
         with pyexiv2.Image(jpg_file) as img:
             exif_dict = img.read_exif()
     except RuntimeError as e:
-        logging.warn(e)
+        logging.warn('RuntimeError reading EXIF data: {}'.format(e))
     except UnicodeDecodeError as e:
-        logging.warn(e)
+        logging.warn('UnicodeDecodeError reading EXIF data: {}'.format(e))
 
     try:
         with pyexiv2.Image(jpg_file) as img:
             xmp_dict = img.read_xmp()
     except RuntimeError as e:
-        logging.warn(e)
+        logging.warn('RuntimeError reading XMP data: {}'.format(e))
 
     try:
         with pyexiv2.Image(jpg_file) as img:
             iptc_dict = img.read_iptc()
     except RuntimeError as e:
-        logging.warn(e)
+        logging.warn('RuntimeError reading IPTC data: {}'.format(e))
     except UnboundLocalError as e:
-        logging.warn(e)
+        logging.warn('UnboundLocalError reading IPTC data: {}'.format(e))
 
     if len(exif_dict) != 0:
         if 'Exif.Photo.DateTimeOriginal' in exif_dict.keys():
