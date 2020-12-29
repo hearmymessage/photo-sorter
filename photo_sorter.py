@@ -73,6 +73,15 @@ def get_jpg_time(jpg_file):
                                                    '%Y:%m:%d %H:%M:%S')
         except ValueError:
             pass
+        except TypeError as e:
+            logging.warn(
+                'TypeError trying to parse EXIF datetime: {} ({} from {})'.format(
+                    e, new_date_time, jpg_file))
+            date_time = datetime.datetime.strptime(new_date_time[1],
+                                                   '%Y:%m:%d %H:%M:%S')
+            logging.info('Timestamp from metadata: {} ({})'.format(
+                date_time, new_date_time))
+            return date_time
         else:
             logging.info('Timestamp from metadata: {} ({})'.format(
                 date_time, new_date_time))
