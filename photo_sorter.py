@@ -24,23 +24,23 @@ def get_jpg_time(jpg_file):
         with pyexiv2.Image(jpg_file) as img:
             exif_dict = img.read_exif()
     except RuntimeError as e:
-        logging.warn('RuntimeError reading EXIF data: {}'.format(e))
+        logging.warning('RuntimeError reading EXIF data: {}'.format(e))
     except UnicodeDecodeError as e:
-        logging.warn('UnicodeDecodeError reading EXIF data: {}'.format(e))
+        logging.warning('UnicodeDecodeError reading EXIF data: {}'.format(e))
 
     try:
         with pyexiv2.Image(jpg_file) as img:
             xmp_dict = img.read_xmp()
     except RuntimeError as e:
-        logging.warn('RuntimeError reading XMP data: {}'.format(e))
+        logging.warning('RuntimeError reading XMP data: {}'.format(e))
 
     try:
         with pyexiv2.Image(jpg_file) as img:
             iptc_dict = img.read_iptc()
     except RuntimeError as e:
-        logging.warn('RuntimeError reading IPTC data: {}'.format(e))
+        logging.warning('RuntimeError reading IPTC data: {}'.format(e))
     except UnboundLocalError as e:
-        logging.warn('UnboundLocalError reading IPTC data: {}'.format(e))
+        logging.warning('UnboundLocalError reading IPTC data: {}'.format(e))
 
     if len(exif_dict) != 0:
         if 'Exif.Photo.DateTimeOriginal' in exif_dict.keys():
@@ -76,7 +76,7 @@ def get_jpg_time(jpg_file):
         except ValueError:
             pass
         except TypeError as e:
-            logging.warn(
+            logging.warning(
                 'TypeError trying to parse EXIF datetime: {} ({} from {})'.format(
                     e, new_date_time, jpg_file))
             date_time = datetime.datetime.strptime(new_date_time[1],
@@ -225,7 +225,7 @@ def main():
         logging.basicConfig(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO)
-    logging.warn(args)
+    logging.warning(args)
 
     find_photos(args.library, args.library, args.output, args.move, args.cut)
 
