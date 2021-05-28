@@ -12,6 +12,8 @@ import time
 VALID_YEARS = range(2003, int(time.strftime('%Y')) + 1)
 VALID_MONTHS = range(1, 12 + 1)
 
+VALID_EXTENSIONS = ['.jpg', '.heic', '.mov', '.mp4', '.png']
+
 
 def get_jpg_time(jpg_file):
     exif_dict = {}
@@ -175,7 +177,7 @@ def find_photos(lib_dir, curr_dir, out_dir, move, cut):
         item_path = os.path.join(curr_dir, item)
         if os.path.isfile(item_path):
             root, file_ext = os.path.splitext(item)
-            if file_ext.lower() == '.jpg':
+            if file_ext.lower() in VALID_EXTENSIONS:
                 date_time = get_jpg_time(item_path)
                 new_path = generate_path(lib_dir, item_path, out_dir,
                                          date_time)
